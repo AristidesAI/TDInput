@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#08080e">
+    <title>TDInput — iPhone &amp; Apple Watch Sensors → TouchDesigner</title>
+    <meta name="description" content="Stream 30+ sensor channels from your iPhone and Apple Watch into TouchDesigner as OSC. 50Hz over local Wi-Fi.">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #08080e;
+            --bg-elevated: #0e0e18;
+            --surface: #131320;
+            --border: rgba(255, 255, 255, 0.06);
+            --border-bright: rgba(255, 255, 255, 0.1);
+            --text: #e8e8f0;
+            --text-dim: #7878a0;
+            --accent: #5b8af5;
+            --accent-glow: rgba(91, 138, 245, 0.15);
+            --accent-soft: rgba(91, 138, 245, 0.08);
+            --pink: #e06088;
+            --green: #50c878;
+            --orange: #e09050;
+            --purple: #a070e0;
+        }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.65;
+            -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
+        }
+
+        .container { max-width: 1080px; margin: 0 auto; padding: 0 32px; }
+
+        /* ── Animated background grid ── */
+        .bg-grid {
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            background-image:
+                linear-gradient(var(--border) 1px, transparent 1px),
+                linear-gradient(90deg, var(--border) 1px, transparent 1px);
+            background-size: 60px 60px;
+            mask-image: radial-gradient(ellipse 60% 50% at 50% 30%, black 20%, transparent 70%);
+            -webkit-mask-image: radial-gradient(ellipse 60% 50% at 50% 30%, black 20%, transparent 70%);
+            opacity: 0.4;
+        }
+
+        /* ── Scroll reveal ── */
+        .reveal {
+            opacity: 0;
+            transform: translateY(32px);
+            transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+                        transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .reveal.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* ── Hero ── */
+        .hero {
+            text-align: center;
+            padding: 100px 0 40px;
+            position: relative;
+        }
+
+        .hero-glow {
+            position: absolute;
+            top: -60px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .hero-icon {
+            width: 100px;
+            height: 100px;
+            border-radius: 24px;
+            margin-bottom: 28px;
+            box-shadow: 0 0 60px var(--accent-glow), 0 4px 20px rgba(0,0,0,0.5);
+        }
+
+        .hero h1 {
+            font-size: clamp(36px, 6vw, 56px);
+            font-weight: 700;
+            letter-spacing: -2px;
+            text-wrap: balance;
+        }
+
+        .hero .tagline {
+            font-size: clamp(16px, 2.5vw, 20px);
+            color: var(--text-dim);
+            max-width: 540px;
+            margin: 16px auto 36px;
+            text-wrap: pretty;
+        }
+
+        .cta-row {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 14px 28px;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: transform 0.2s, box-shadow 0.2s;
+            touch-action: manipulation;
+        }
+
+        .btn:hover { transform: translateY(-1px); }
+        .btn:active { transform: translateY(0); }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #fff;
+            box-shadow: 0 4px 24px var(--accent-glow);
+        }
+        .btn-primary:hover { box-shadow: 0 8px 32px var(--accent-glow); }
+
+        .btn-ghost {
+            background: var(--accent-soft);
+            color: var(--accent);
+            border: 1px solid var(--border-bright);
+        }
+
+        /* ── Flow ── */
+        .flow {
+            text-align: center;
+            padding: 32px 0 48px;
+        }
+
+        .flow-line {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            color: var(--text-dim);
+            padding: 12px 24px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 100px;
+        }
+
+        .flow-line .node {
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        .flow-line .arrow {
+            color: var(--text-dim);
+            opacity: 0.4;
+        }
+
+        /* ── Section headings ── */
+        section { padding: 80px 0; }
+
+        .section-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            font-weight: 500;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-bottom: 12px;
+        }
+
+        section h2 {
+            font-size: clamp(24px, 4vw, 36px);
+            font-weight: 700;
+            letter-spacing: -1px;
+            margin-bottom: 16px;
+            text-wrap: balance;
+        }
+
+        section > .container > p {
+            color: var(--text-dim);
+            font-size: 17px;
+            max-width: 560px;
+        }
+
+        /* ── Screenshots ── */
+        .screenshots {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 32px 0;
+            scrollbar-width: none;
+        }
+        .screenshots::-webkit-scrollbar { display: none; }
+
+        .screenshots-track {
+            display: flex;
+            gap: 20px;
+            padding: 0 32px 16px;
+        }
+
+        .screenshots-track img {
+            height: 500px;
+            width: auto;
+            border-radius: 20px;
+            border: 1px solid var(--border-bright);
+            flex-shrink: 0;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .screenshots-track img:hover {
+            transform: translateY(-4px) scale(1.01);
+        }
+
+        /* ── Sensor cards ── */
+        .sensor-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1px;
+            margin-top: 32px;
+            background: var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        .sensor-card {
+            background: var(--bg-elevated);
+            padding: 28px;
+            position: relative;
+            transition: background 0.3s;
+        }
+
+        .sensor-card:hover {
+            background: var(--surface);
+        }
+
+        .sensor-icon {
+            width: 40px;
+            height: 40px;
+            margin-bottom: 16px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .sensor-card:hover .sensor-icon {
+            transform: scale(1.1) rotate(-3deg);
+        }
+
+        .sensor-icon.blue { background: rgba(91, 138, 245, 0.12); color: var(--accent); }
+        .sensor-icon.pink { background: rgba(224, 96, 136, 0.12); color: var(--pink); }
+        .sensor-icon.green { background: rgba(80, 200, 120, 0.12); color: var(--green); }
+        .sensor-icon.orange { background: rgba(224, 144, 80, 0.12); color: var(--orange); }
+        .sensor-icon.purple { background: rgba(160, 112, 224, 0.12); color: var(--purple); }
+
+        .sensor-card h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .sensor-card .channels {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--accent);
+            margin-bottom: 10px;
+            opacity: 0.8;
+        }
+
+        .sensor-card p {
+            font-size: 14px;
+            color: var(--text-dim);
+            line-height: 1.5;
+            margin: 0;
+        }
+
+        .sensor-card .badge {
+            display: inline-block;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            font-weight: 500;
+            padding: 3px 8px;
+            border-radius: 6px;
+            background: var(--accent-soft);
+            color: var(--accent);
+            margin-top: 12px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        /* ── Use cases ── */
+        .use-cases-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+            margin-top: 32px;
+        }
+
+        .use-case {
+            padding: 24px;
+            border-radius: 14px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            transition: border-color 0.3s, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .use-case:hover {
+            border-color: var(--border-bright);
+            transform: translateY(-2px);
+        }
+
+        .use-case-icon {
+            font-size: 24px;
+            margin-bottom: 12px;
+            display: block;
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .use-case:hover .use-case-icon {
+            transform: translateY(-2px) scale(1.15);
+        }
+
+        .use-case strong {
+            display: block;
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .use-case p {
+            font-size: 14px;
+            color: var(--text-dim);
+            margin: 0;
+            line-height: 1.55;
+        }
+
+        /* ── Setup steps ── */
+        .steps {
+            counter-reset: step;
+            margin-top: 32px;
+            max-width: 640px;
+        }
+
+        .step {
+            display: flex;
+            gap: 20px;
+            padding: 24px 0;
+            border-bottom: 1px solid var(--border);
+            align-items: flex-start;
+        }
+
+        .step:last-child { border-bottom: none; }
+
+        .step-num {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: var(--accent-soft);
+            border: 1px solid rgba(91, 138, 245, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--accent);
+            flex-shrink: 0;
+            transition: transform 0.3s, background 0.3s;
+        }
+
+        .step:hover .step-num {
+            transform: scale(1.08);
+            background: var(--accent-glow);
+        }
+
+        .step p {
+            font-size: 15px;
+            color: var(--text);
+            margin: 0;
+            padding-top: 6px;
+        }
+
+        .step code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 2px 7px;
+            border-radius: 6px;
+        }
+
+        /* ── Privacy ── */
+        .privacy-card {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 32px;
+            margin-top: 24px;
+            max-width: 640px;
+        }
+
+        .privacy-card p {
+            font-size: 15px;
+            color: var(--text-dim);
+            margin: 0;
+        }
+
+        .privacy-card a {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        /* ── Footer ── */
+        footer {
+            text-align: center;
+            padding: 64px 0 48px;
+            border-top: 1px solid var(--border);
+            color: var(--text-dim);
+            font-size: 14px;
+        }
+
+        footer a { color: var(--accent); text-decoration: none; }
+
+        /* ── Responsive ── */
+        @media (max-width: 640px) {
+            .container { padding: 0 20px; }
+            .hero { padding: 64px 0 32px; }
+            .sensor-grid { grid-template-columns: 1fr; }
+            .use-cases-grid { grid-template-columns: 1fr; }
+            .screenshots-track img { height: 380px; }
+            .screenshots-track { padding: 0 20px 16px; }
+            section { padding: 56px 0; }
+            .flow-line { font-size: 12px; gap: 8px; padding: 10px 16px; }
+        }
+
+        /* ── Reduced motion ── */
+        @media (prefers-reduced-motion: reduce) {
+            .reveal { transition: none; opacity: 1; transform: none; }
+            .sensor-card:hover .sensor-icon,
+            .use-case:hover .use-case-icon,
+            .step:hover .step-num,
+            .screenshots-track img:hover,
+            .btn:hover { transform: none; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="bg-grid" aria-hidden="true"></div>
+
+<!-- ── Hero ── -->
+<div class="container">
+    <header class="hero reveal">
+        <div class="hero-glow" aria-hidden="true"></div>
+        <img src="assets/icon.png" alt="TDInput app icon" class="hero-icon" width="100" height="100">
+        <h1>TDInput</h1>
+        <p class="tagline">Stream iPhone and Apple Watch sensors into TouchDesigner as OSC. 30+ channels at 50&nbsp;Hz over local Wi-Fi.</p>
+        <div class="cta-row">
+            <a href="#" class="btn btn-primary" aria-label="Download TDInput on the App Store">App Store</a>
+            <a href="#setup" class="btn btn-ghost">Setup Guide</a>
+        </div>
+    </header>
+
+    <div class="flow reveal">
+        <div class="flow-line">
+            <span class="node">iPhone</span>
+            <span class="arrow">+</span>
+            <span class="node">Apple Watch</span>
+            <span class="arrow">→</span>
+            <span>OSC</span>
+            <span class="arrow">→</span>
+            <span class="node">TouchDesigner</span>
+        </div>
+    </div>
+</div>
+
+<!-- ── Screenshots ── -->
+<section>
+    <div class="container reveal">
+        <div class="section-label">Interface</div>
+        <h2>The App</h2>
+    </div>
+    <div class="screenshots reveal">
+        <div class="screenshots-track">
+            <img src="assets/IMG_6607.PNG" alt="TDInput dashboard" loading="lazy" width="222" height="480">
+            <img src="assets/IMG_6608.PNG" alt="TDInput sensors streaming" loading="lazy" width="222" height="480">
+            <img src="assets/IMG_6609.PNG" alt="TDInput onboarding" loading="lazy" width="222" height="480">
+            <img src="assets/IMG_6610.PNG" alt="TDInput settings" loading="lazy" width="222" height="480">
+            <img src="assets/IMG_6611.PNG" alt="TDInput permissions" loading="lazy" width="222" height="480">
+            <img src="assets/IMG_6612.PNG" alt="TDInput live data" loading="lazy" width="222" height="480">
+            <img src="assets/IMG_6613.PNG" alt="TDInput connected" loading="lazy" width="222" height="480">
+            <img src="assets/IMG_6614.PNG" alt="TDInput OSC output" loading="lazy" width="222" height="480">
+        </div>
+    </div>
+</section>
+
+<!-- ── Sensors ── -->
+<section>
+    <div class="container">
+        <div class="reveal">
+            <div class="section-label">Channels</div>
+            <h2>What it streams</h2>
+            <p>Every sensor your iPhone and Apple Watch have, arriving as standard OSC float channels. Works with just a phone.</p>
+        </div>
+
+        <div class="sensor-grid reveal">
+            <div class="sensor-card">
+                <div class="sensor-icon blue" aria-hidden="true">&#x21BB;</div>
+                <h3>Orientation</h3>
+                <div class="channels">/phone/motion/pitch, roll, yaw</div>
+                <p>Full 3D orientation at 50&nbsp;Hz. Tilt, twist, rotate.</p>
+            </div>
+            <div class="sensor-card">
+                <div class="sensor-icon orange" aria-hidden="true">&#x2197;</div>
+                <h3>Acceleration</h3>
+                <div class="channels">/phone/accel/x, y, z</div>
+                <p>User acceleration with gravity removed. Gesture detection, shake, punch.</p>
+            </div>
+            <div class="sensor-card">
+                <div class="sensor-icon purple" aria-hidden="true">&#x27F3;</div>
+                <h3>Gyroscope</h3>
+                <div class="channels">/phone/rotation/x, y, z</div>
+                <p>Angular velocity on every axis. How fast you're spinning.</p>
+            </div>
+            <div class="sensor-card">
+                <div class="sensor-icon green" aria-hidden="true">&#x2193;</div>
+                <h3>Gravity</h3>
+                <div class="channels">/phone/gravity/x, y, z</div>
+                <p>Which direction is down, independent of motion.</p>
+            </div>
+            <div class="sensor-card">
+                <div class="sensor-icon orange" aria-hidden="true">&#x25C8;</div>
+                <h3>Magnetometer</h3>
+                <div class="channels">/phone/magnetic/x, y, z</div>
+                <p>Calibrated compass heading on three axes.</p>
+            </div>
+            <div class="sensor-card">
+                <div class="sensor-icon green" aria-hidden="true">&#x25B2;</div>
+                <h3>Altitude</h3>
+                <div class="channels">/phone/altitude/relative, pressure</div>
+                <p>Barometric elevation changes and atmospheric pressure.</p>
+            </div>
+            <div class="sensor-card">
+                <div class="sensor-icon pink" aria-hidden="true">&#x2665;</div>
+                <h3>Heart Rate</h3>
+                <div class="channels">/watch/heart/bpm</div>
+                <p>Live BPM from an active workout session.</p>
+                <span class="badge">Apple Watch</span>
+            </div>
+            <div class="sensor-card">
+                <div class="sensor-icon blue" aria-hidden="true">&#x25CE;</div>
+                <h3>Digital Crown</h3>
+                <div class="channels">/watch/crown/delta</div>
+                <p>Precision scroll input. Scrub timelines, dial parameters.</p>
+                <span class="badge">Apple Watch</span>
+            </div>
+            <div class="sensor-card">
+                <div class="sensor-icon purple" aria-hidden="true">&#x270B;</div>
+                <h3>Wrist Motion</h3>
+                <div class="channels">/watch/motion/pitch, roll, yaw</div>
+                <p>Full wrist orientation at 50&nbsp;Hz with acceleration and gyroscope.</p>
+                <span class="badge">Apple Watch</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ── Use cases ── -->
+<section>
+    <div class="container">
+        <div class="reveal">
+            <div class="section-label">Ideas</div>
+            <h2>What you can do with it</h2>
+        </div>
+
+        <div class="use-cases-grid">
+            <div class="use-case reveal">
+                <span class="use-case-icon" aria-hidden="true">&#x2665;</span>
+                <strong>Heart rate &rarr; generative art</strong>
+                <p>Map your BPM to a reaction diffusion system, fluid simulation, or particle emitter. The piece breathes with the viewer.</p>
+            </div>
+            <div class="use-case reveal">
+                <span class="use-case-icon" aria-hidden="true">&#x21BB;</span>
+                <strong>Phone tilt &rarr; camera control</strong>
+                <p>Orbit around a 3D scene by tilting your wrist. Use it as a wireless controller during a live set.</p>
+            </div>
+            <div class="use-case reveal">
+                <span class="use-case-icon" aria-hidden="true">&#x2601;</span>
+                <strong>Acceleration &rarr; mesh displacement</strong>
+                <p>Move fast, the surface breaks apart. Hold still, it settles. Interactive installations where the audience drives the visuals.</p>
+            </div>
+            <div class="use-case reveal">
+                <span class="use-case-icon" aria-hidden="true">&#x25C8;</span>
+                <strong>Compass &rarr; color palette</strong>
+                <p>Map compass heading to hue. North is blue, south is red. Walk in a circle, the spectrum cycles.</p>
+            </div>
+            <div class="use-case reveal">
+                <span class="use-case-icon" aria-hidden="true">&#x25CE;</span>
+                <strong>Digital Crown &rarr; timeline</strong>
+                <p>Scroll through keyframes, blend morph targets, or dial a parameter without touching a mouse.</p>
+            </div>
+            <div class="use-case reveal">
+                <span class="use-case-icon" aria-hidden="true">&#x25B2;</span>
+                <strong>Altitude &rarr; environment</strong>
+                <p>Walk upstairs, the fog lifts. Walk down, it closes in. Architecture drives the visuals in multi-level installations.</p>
+            </div>
+            <div class="use-case reveal">
+                <span class="use-case-icon" aria-hidden="true">&#x27F3;</span>
+                <strong>Gyroscope &rarr; particle emission</strong>
+                <p>Spin your wrist, particles scatter. Stop, they collect. Rotation rate as emission intensity.</p>
+            </div>
+            <div class="use-case reveal">
+                <span class="use-case-icon" aria-hidden="true">&#x2637;</span>
+                <strong>Multiple phones &rarr; multi-performer</strong>
+                <p>Each person controls a different layer. One wrist drives rotation, another phone drives color, someone's heart rate drives intensity.</p>
+            </div>
+            <div class="use-case reveal">
+                <span class="use-case-icon" aria-hidden="true">&#x266B;</span>
+                <strong>Wireless live set controller</strong>
+                <p>Leave the laptop on stage. Control parameters from the crowd or from across the room.</p>
+            </div>
+            <div class="use-case reveal">
+                <span class="use-case-icon" aria-hidden="true">&#x26A1;</span>
+                <strong>Rapid sensor prototyping</strong>
+                <p>30 channels at 50&nbsp;Hz, ready to wire. Faster than setting up an Arduino every time you want to test an interaction.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ── Setup ── -->
+<section id="setup">
+    <div class="container">
+        <div class="reveal">
+            <div class="section-label">Getting started</div>
+            <h2>Setup</h2>
+            <p>Takes about 30 seconds. iPhone and Mac on the same Wi-Fi.</p>
+        </div>
+
+        <div class="steps reveal">
+            <div class="step">
+                <div class="step-num">1</div>
+                <p>Open TDInput on your iPhone. Enter your Mac's local IP address and port <code>9000</code>.</p>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <p>In TouchDesigner, place an <code>OSC In CHOP</code>. Set the port to <code>9000</code>.</p>
+            </div>
+            <div class="step">
+                <div class="step-num">3</div>
+                <p>Toggle <strong>Stream iPhone Sensors</strong> on in the app.</p>
+            </div>
+            <div class="step">
+                <div class="step-num">4</div>
+                <p>Channels appear in TD. Wire them into your project.</p>
+            </div>
+        </div>
+
+        <p class="reveal" style="margin-top: 24px; color: var(--text-dim); font-size: 15px;">For Apple Watch: open TDInput on your watch and tap Start. Watch channels appear alongside phone channels.</p>
+    </div>
+</section>
+
+<!-- ── Privacy ── -->
+<section>
+    <div class="container reveal">
+        <div class="section-label">Data</div>
+        <h2>Privacy</h2>
+        <div class="privacy-card">
+            <p>TDInput collects no data. No analytics, no tracking, no cloud. All sensor data stays on your local network between your devices. <a href="privacy.html">Full privacy policy</a>.</p>
+        </div>
+    </div>
+</section>
+
+<!-- ── Footer ── -->
+<footer>
+    <div class="container">
+        <p style="font-weight: 600; color: var(--text);">TDInput</p>
+        <p style="margin-top: 8px;"><a href="privacy.html">Privacy Policy</a></p>
+    </div>
+</footer>
+
+<script>
+    // Intersection Observer for scroll reveals
+    const observer = new IntersectionObserver(
+        (entries) => {
+            entries.forEach((entry) => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                    observer.unobserve(entry.target);
+                }
+            });
+        },
+        { threshold: 0.1, rootMargin: '0px 0px -40px 0px' }
+    );
+
+    document.querySelectorAll('.reveal').forEach((el) => observer.observe(el));
+</script>
+
+</body>
+</html>
